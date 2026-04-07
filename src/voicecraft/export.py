@@ -1,10 +1,11 @@
-"""Export synthesized audio to WAV and/or MP3 formats."""
+"""Export synthesized audio to WAV/MP3 and play directly."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
+import sounddevice as sd
 import soundfile as sf
 from rich.console import Console
 
@@ -20,6 +21,15 @@ def normalize_audio(waveform: np.ndarray, target_peak: float = 0.95) -> np.ndarr
     if peak > 0:
         waveform = waveform * (target_peak / peak)
     return waveform
+
+
+def play_audio(waveform: np.ndarray, sr: int = OUTPUT_SAMPLE_RATE) -> None:
+    """Play a waveform directly through speakers via sounddevice."""
+    waveform = normalize_audio(waveform)
+    console.print("[cyan]Playing audio...[/cyan]")
+    sd.play(waveform, samplerate=sr)
+    sd.wait()  # Block until playback finishes
+    console.print("[green]Playback finished.[/green]")
 
 
 def save_wav(waveform: np.ndarray, path: str | Path, sr: int = OUTPUT_SAMPLE_RATE) -> Path:

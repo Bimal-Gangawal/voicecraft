@@ -104,46 +104,60 @@ def clone(
     console.print(f"[green]Done in {elapsed:.1f}s. Use [bold]voicecraft speak --voice {name}[/bold] to generate speech.[/green]")
 
 
+def _build_settings(
+    speed: float, temperature: float, repetition_penalty: float
+) -> "VoiceSettings":
+    """Build a VoiceSettings from CLI flags."""
+    from voicecraft.synthesizer import VoiceSettings
+
+    return VoiceSettings(
+        speed=speed,
+        temperature=temperature,
+        repetition_penalty=repetition_penalty,
+    )
+
+
 @app.command()
 def speak(
     voice: str = typer.Option(..., "--voice", "-v", help="Name of a saved voice profile."),
     text: str = typer.Option(..., "--text", "-t", help="Text to synthesize."),
     lang: str = typer.Option("en", "--lang", "-l", help="Language code: 'en' (English) or 'hi' (Hindi)."),
-    fmt: str = typer.Option("wav", "--format", "-f", help="Output format: 'wav' or 'mp3'."),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path. Auto-generated if omitted."),
-    play: bool = typer.Option(False, "--play", "-p", help="Play the audio after generation (macOS only)."),
+    save: Optional[Path] = typer.Option(None, "--save", "-s", help="Save audio to file (WAV/MP3). If omitted, plays directly."),
+    fmt: str = typer.Option("wav", "--format", "-f", help="Output format when saving: 'wav' or 'mp3'."),
+    speed: float = typer.Option(1.0, "--speed", help="Speech speed multiplier (0.5 = slow, 1.0 = normal, 2.0 = fast)."),
+    temperature: float = typer.Option(0.75, "--temperature", help="Expressiveness (0.1 = flat, 0.75 = natural, 1.0+ = very expressive)."),
+    repetition_penalty: float = typer.Option(10.0, "--repetition-penalty", help="Repetition penalty (higher = less repetition)."),
 ) -> None:
-    """Generate speech in a cloned voice."""
-    from voicecraft.export import save_audio
+    """Generate speech in a cloned voice. Plays directly by default; use --save to write to file."""
+    from voicecraft.export import play_audio, save_audio
     from voicecraft.synthesizer import synthesize
 
     if lang not in SUPPORTED_LANGUAGES:
         console.print(f"[red]Error: Unsupported language '{lang}'. Use: {list(SUPPORTED_LANGUAGES.keys())}[/red]")
         raise typer.Exit(1)
 
-    if fmt not in ("wav", "mp3"):
+    if save and fmt not in ("wav", "mp3"):
         console.print("[red]Error: Format must be 'wav' or 'mp3'.[/red]")
         raise typer.Exit(1)
 
-    # Auto-generate output path
-    if output is None:
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output = OUTPUT_DIR / f"{voice}_{lang}_{timestamp}.{fmt}"
+    settings = _build_settings(speed, temperature, repetition_penalty)
 
     console.print(f"[bold]Voice:[/bold] {voice}")
     console.print(f"[bold]Language:[/bold] {SUPPORTED_LANGUAGES[lang]}")
+    console.print(f"[bold]Speed:[/bold] {speed}x  [bold]Temperature:[/bold] {temperature}")
     console.print(f"[bold]Text:[/bold] {text[:80]}{'...' if len(text) > 80 else ''}")
     console.print()
 
     start = time.time()
-    waveform = synthesize(text, voice, lang)
-    saved_path = save_audio(waveform, output, fmt)
+    waveform = synthesize(text, voice, lang, settings)
     elapsed = time.time() - start
 
-    console.print(f"[green]Generated in {elapsed:.1f}s: {saved_path}[/green]")
+    console.print(f"[green]Generated in {elapsed:.1f}s[/green]")
 
-    if play:
-        _play_audio(saved_path)
+    if save:
+        save_audio(waveform, save, fmt)
+    else:
+        play_audio(waveform)
 
 
 @app.command()
@@ -151,12 +165,14 @@ def say(
     sample: Path = typer.Option(..., "--sample", "-s", help="Path to voice sample audio file."),
     text: str = typer.Option(..., "--text", "-t", help="Text to synthesize."),
     lang: str = typer.Option("en", "--lang", "-l", help="Language code: 'en' or 'hi'."),
-    fmt: str = typer.Option("wav", "--format", "-f", help="Output format: 'wav' or 'mp3'."),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path."),
-    play: bool = typer.Option(False, "--play", "-p", help="Play the audio after generation."),
+    save: Optional[Path] = typer.Option(None, "--save", help="Save audio to file. If omitted, plays directly."),
+    fmt: str = typer.Option("wav", "--format", "-f", help="Output format when saving: 'wav' or 'mp3'."),
+    speed: float = typer.Option(1.0, "--speed", help="Speech speed multiplier."),
+    temperature: float = typer.Option(0.75, "--temperature", help="Expressiveness."),
+    repetition_penalty: float = typer.Option(10.0, "--repetition-penalty", help="Repetition penalty."),
 ) -> None:
     """One-shot: clone a voice and synthesize speech in a single command (no saved profile)."""
-    from voicecraft.export import save_audio
+    from voicecraft.export import play_audio, save_audio
     from voicecraft.synthesizer import synthesize_oneshot
 
     if not sample.exists():
@@ -167,9 +183,7 @@ def say(
         console.print(f"[red]Error: Unsupported language '{lang}'. Use: {list(SUPPORTED_LANGUAGES.keys())}[/red]")
         raise typer.Exit(1)
 
-    if output is None:
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        output = OUTPUT_DIR / f"oneshot_{lang}_{timestamp}.{fmt}"
+    settings = _build_settings(speed, temperature, repetition_penalty)
 
     console.print(f"[bold]Sample:[/bold] {sample}")
     console.print(f"[bold]Language:[/bold] {SUPPORTED_LANGUAGES[lang]}")
@@ -177,14 +191,15 @@ def say(
     console.print()
 
     start = time.time()
-    waveform = synthesize_oneshot(text, sample, lang)
-    saved_path = save_audio(waveform, output, fmt)
+    waveform = synthesize_oneshot(text, sample, lang, settings)
     elapsed = time.time() - start
 
-    console.print(f"[green]Generated in {elapsed:.1f}s: {saved_path}[/green]")
+    console.print(f"[green]Generated in {elapsed:.1f}s[/green]")
 
-    if play:
-        _play_audio(saved_path)
+    if save:
+        save_audio(waveform, save, fmt)
+    else:
+        play_audio(waveform)
 
 
 @app.command()
@@ -213,17 +228,6 @@ def voices() -> None:
         )
 
     console.print(table)
-
-
-def _play_audio(path: Path) -> None:
-    """Play audio using macOS afplay."""
-    console.print(f"[cyan]Playing: {path}[/cyan]")
-    try:
-        subprocess.run(["afplay", str(path)], check=True)
-    except FileNotFoundError:
-        console.print("[yellow]afplay not found — audio playback is only supported on macOS.[/yellow]")
-    except subprocess.CalledProcessError:
-        console.print("[yellow]Failed to play audio.[/yellow]")
 
 
 if __name__ == "__main__":
