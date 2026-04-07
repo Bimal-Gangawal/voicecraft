@@ -6,6 +6,9 @@ import functools
 import typing
 
 import torch
+import torchaudio
+import soundfile as sf_lib
+import numpy as np
 from rich.console import Console
 
 from voicecraft.config import DEVICE, MODEL_CACHE_DIR
@@ -26,6 +29,28 @@ def _patched_torch_load(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
 
 
 torch.load = _patched_torch_load  # type: ignore[assignment]
+
+# ── torchaudio 2.6+ compatibility ───────────────────────────────────────────
+# torchaudio 2.6+ defaults to torchcodec backend which may not be installed.
+# Patch torchaudio.load to use soundfile instead, which TTS calls internally.
+_original_torchaudio_load = torchaudio.load
+
+
+def _patched_torchaudio_load(
+    filepath: typing.Any, *args: typing.Any, **kwargs: typing.Any
+) -> tuple[torch.Tensor, int]:
+    """Load audio via soundfile, returning (waveform_tensor, sample_rate)."""
+    try:
+        return _original_torchaudio_load(filepath, *args, **kwargs)
+    except (ImportError, RuntimeError):
+        # soundfile returns (samples, channels)
+        data, sr = sf_lib.read(str(filepath), always_2d=True)
+        # Convert to (channels, samples) float32 tensor
+        waveform = torch.from_numpy(data.T.astype(np.float32))
+        return waveform, sr
+
+
+torchaudio.load = _patched_torchaudio_load  # type: ignore[assignment]
 
 # Singleton — avoid loading the model multiple times in one process
 _tts_instance: typing.Any | None = None
