@@ -8,7 +8,7 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-import torchaudio
+from torchaudio.transforms import Resample
 
 from voicecraft.config import (
     MAX_SAMPLE_DURATION,
@@ -25,19 +25,21 @@ class AudioValidationError(Exception):
 def load_audio(path: str | Path) -> tuple[np.ndarray, int]:
     """Load an audio file and return (waveform_numpy, sample_rate).
 
-    Supports any format that torchaudio/soundfile/librosa can handle
+    Supports any format that soundfile/librosa can handle
     (wav, mp3, flac, ogg, m4a, etc.).
+    Returns shape (channels, samples) with at least 2 dims.
     """
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Audio file not found: {path}")
 
     try:
-        waveform, sr = torchaudio.load(str(path))
-        # Convert to numpy (channels, samples) → (samples,) mono
-        waveform_np = waveform.numpy()
+        # soundfile returns (samples, channels) for multi-channel
+        data, sr = sf.read(str(path), always_2d=True)
+        # Transpose to (channels, samples) for consistency
+        waveform_np = data.T.astype(np.float32)
     except Exception:
-        # Fallback to librosa for formats torchaudio can't handle
+        # Fallback to librosa for formats soundfile can't handle (mp3, etc.)
         waveform_np, sr = librosa.load(str(path), sr=None, mono=False)
         if waveform_np.ndim == 1:
             waveform_np = waveform_np[np.newaxis, :]
@@ -61,7 +63,7 @@ def resample(waveform: np.ndarray, orig_sr: int, target_sr: int = SAMPLE_RATE) -
     if orig_sr == target_sr:
         return waveform
     waveform_tensor = torch.from_numpy(waveform).unsqueeze(0).float()
-    resampler = torchaudio.transforms.Resample(orig_freq=orig_sr, new_freq=target_sr)
+    resampler = Resample(orig_freq=orig_sr, new_freq=target_sr)
     resampled = resampler(waveform_tensor).squeeze(0).numpy()
     return resampled
 
