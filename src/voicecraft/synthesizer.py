@@ -42,6 +42,37 @@ class VoiceSettings:
     length_penalty: float = 1.0    # Beam search length penalty
 
 
+# ── Accent presets ───────────────────────────────────────────────────────────
+ACCENT_PRESETS: dict[str, VoiceSettings] = {
+    "neutral": VoiceSettings(),
+    "indian-english": VoiceSettings(
+        temperature=0.5,
+        repetition_penalty=12.0,
+        top_k=30,
+        top_p=0.75,
+        speed=0.95,
+        length_penalty=1.0,
+    ),
+    "indian-hindi": VoiceSettings(
+        temperature=0.55,
+        repetition_penalty=11.0,
+        top_k=35,
+        top_p=0.80,
+        speed=0.90,
+        length_penalty=1.0,
+    ),
+}
+
+
+def get_preset(name: str) -> VoiceSettings:
+    """Return a VoiceSettings preset by name. Raises ValueError if unknown."""
+    if name not in ACCENT_PRESETS:
+        raise ValueError(
+            f"Unknown preset '{name}'. Available: {list(ACCENT_PRESETS.keys())}"
+        )
+    return ACCENT_PRESETS[name]
+
+
 # ── Text preprocessing ──────────────────────────────────────────────────────
 
 def _normalize_text(text: str, lang: str) -> str:

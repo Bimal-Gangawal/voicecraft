@@ -1,11 +1,15 @@
 """Tests for the synthesizer module (text processing — synthesis requires the model)."""
 
+import pytest
+
 from voicecraft.synthesizer import (
+    ACCENT_PRESETS,
     VoiceSettings,
     _get_trailing_pause,
     _normalize_text,
     _split_into_chunks,
     _split_into_sentences,
+    get_preset,
     PAUSE_COMMA,
     PAUSE_COLON,
     PAUSE_ELLIPSIS,
@@ -143,3 +147,41 @@ class TestVoiceSettings:
         assert s.temperature == 0.5
         assert s.speed == 1.2
         assert s.repetition_penalty == 5.0
+
+
+class TestAccentPresets:
+    def test_neutral_preset_matches_defaults(self) -> None:
+        neutral = ACCENT_PRESETS["neutral"]
+        default = VoiceSettings()
+        assert neutral.temperature == default.temperature
+        assert neutral.speed == default.speed
+        assert neutral.repetition_penalty == default.repetition_penalty
+
+    def test_indian_english_preset_exists(self) -> None:
+        preset = ACCENT_PRESETS["indian-english"]
+        assert preset.temperature == 0.5
+        assert preset.speed == 0.95
+        assert preset.repetition_penalty == 12.0
+        assert preset.top_k == 30
+        assert preset.top_p == 0.75
+
+    def test_indian_hindi_preset_exists(self) -> None:
+        preset = ACCENT_PRESETS["indian-hindi"]
+        assert preset.temperature == 0.55
+        assert preset.speed == 0.90
+        assert preset.repetition_penalty == 11.0
+        assert preset.top_k == 35
+        assert preset.top_p == 0.80
+
+    def test_get_preset_valid(self) -> None:
+        preset = get_preset("indian-english")
+        assert isinstance(preset, VoiceSettings)
+        assert preset.temperature == 0.5
+
+    def test_get_preset_invalid_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown preset"):
+            get_preset("nonexistent-accent")
+
+    def test_all_presets_are_voice_settings(self) -> None:
+        for name, preset in ACCENT_PRESETS.items():
+            assert isinstance(preset, VoiceSettings), f"Preset '{name}' is not a VoiceSettings"

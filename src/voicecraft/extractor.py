@@ -1,8 +1,9 @@
-"""Extract speaker conditioning latents from a voice sample and save as a voice profile."""
+"""Extract speaker conditioning latents from voice samples and save as a voice profile."""
 
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -17,39 +18,72 @@ console = Console()
 
 
 def extract_voice_profile(
-    sample_path: str | Path,
+    sample_paths: str | Path | list[str | Path],
     voice_name: str,
 ) -> Path:
-    """Extract speaker embeddings from a voice sample and save as a reusable profile.
+    """Extract speaker embeddings from one or more voice samples and save as a reusable profile.
+
+    Using multiple samples significantly improves accent and voice characteristic capture.
 
     Args:
-        sample_path: Path to the voice sample audio file.
+        sample_paths: Path(s) to voice sample audio file(s). Can be a single path,
+                      a list of paths, or a path to a directory containing audio files.
         voice_name: Name for the voice profile (used for storage and retrieval).
 
     Returns:
         Path to the saved voice profile directory.
     """
-    sample_path = Path(sample_path)
+    # Normalize to a list of paths
+    if isinstance(sample_paths, (str, Path)):
+        sample_paths = Path(sample_paths)
+        if sample_paths.is_dir():
+            # Collect all audio files from directory
+            audio_exts = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
+            sample_paths = sorted(
+                p for p in sample_paths.iterdir()
+                if p.suffix.lower() in audio_exts
+            )
+            if not sample_paths:
+                raise FileNotFoundError(f"No audio files found in directory: {sample_paths}")
+        else:
+            sample_paths = [sample_paths]
+    else:
+        sample_paths = [Path(p) for p in sample_paths]
 
-    # Preprocess the audio
-    console.print(f"[cyan]Preprocessing audio sample: {sample_path.name}[/cyan]")
-    processed_path, warnings = preprocess(sample_path)
-    for w in warnings:
+    console.print(f"[cyan]Processing {len(sample_paths)} audio sample(s)...[/cyan]")
+
+    processed_paths: list[str] = []
+    total_duration = 0.0
+    all_warnings: list[str] = []
+    source_files: list[str] = []
+
+    for i, path in enumerate(sample_paths):
+        path = Path(path)
+        source_files.append(path.name)
+        console.print(f"[cyan]  [{i+1}/{len(sample_paths)}] Preprocessing: {path.name}[/cyan]")
+
+        processed_path, warnings = preprocess(path)
+        all_warnings.extend(warnings)
+
+        waveform, sr = load_audio(processed_path)
+        waveform = to_mono(waveform)
+        duration = get_duration(waveform, sr)
+        total_duration += duration
+
+        processed_paths.append(processed_path)
+
+    for w in all_warnings:
         console.print(f"[yellow]  Warning: {w}[/yellow]")
 
-    # Get sample duration for metadata
-    waveform, sr = load_audio(processed_path)
-    waveform = to_mono(waveform)
-    duration = get_duration(waveform, sr)
-    console.print(f"[cyan]Sample duration: {duration:.1f}s[/cyan]")
+    console.print(f"[cyan]Total sample duration: {total_duration:.1f}s across {len(processed_paths)} file(s)[/cyan]")
 
-    # Load model and extract conditioning latents
+    # Load model and extract conditioning latents from ALL samples
     tts = load_model()
     model = tts.synthesizer.tts_model
 
     console.print("[cyan]Extracting speaker conditioning latents...[/cyan]")
     gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(
-        audio_path=[processed_path]
+        audio_path=processed_paths
     )
 
     # Save voice profile
@@ -68,21 +102,24 @@ def extract_voice_profile(
     # Save metadata
     metadata = {
         "name": voice_name,
-        "sample_file": sample_path.name,
-        "sample_duration_s": round(duration, 2),
+        "sample_file": ", ".join(source_files),
+        "num_samples": len(processed_paths),
+        "sample_duration_s": round(total_duration, 2),
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "model": "xtts_v2",
     }
     (profile_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
-    # Copy the processed sample for reference
-    import shutil
-    shutil.copy2(processed_path, profile_dir / "reference.wav")
+    # Copy first processed sample for reference
+    shutil.copy2(processed_paths[0], profile_dir / "reference.wav")
 
-    # Clean up processed temp file
-    Path(processed_path).unlink(missing_ok=True)
+    # Clean up processed temp files
+    for p in processed_paths:
+        Path(p).unlink(missing_ok=True)
 
     console.print(f"[green]Voice profile [bold]{voice_name}[/bold] saved to {profile_dir}[/green]")
+    if len(processed_paths) > 1:
+        console.print(f"[green]Used {len(processed_paths)} samples for better accent capture.[/green]")
     return profile_dir
 
 
