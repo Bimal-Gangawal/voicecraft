@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,9 @@ import numpy as np
 import torch
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+# Suppress benign HuggingFace attention mask warning from XTTS GPT decoder
+logging.getLogger("transformers.generation.utils").setLevel(logging.ERROR)
 
 from voicecraft.config import DEVICE, OUTPUT_DIR, SUPPORTED_LANGUAGES
 from voicecraft.extractor import load_voice_profile
