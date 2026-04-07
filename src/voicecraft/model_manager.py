@@ -2,13 +2,30 @@
 
 from __future__ import annotations
 
+import functools
 import typing
 
+import torch
 from rich.console import Console
 
 from voicecraft.config import DEVICE, MODEL_CACHE_DIR
 
 console = Console()
+
+# ── PyTorch 2.6+ compatibility ──────────────────────────────────────────────
+# TTS 0.22.0 checkpoints contain custom classes that torch.load(weights_only=True)
+# rejects. Patch torch.load so TTS internals default to weights_only=False.
+_original_torch_load = torch.load
+
+
+@functools.wraps(_original_torch_load)
+def _patched_torch_load(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    return _original_torch_load(*args, **kwargs)
+
+
+torch.load = _patched_torch_load  # type: ignore[assignment]
 
 # Singleton — avoid loading the model multiple times in one process
 _tts_instance: typing.Any | None = None
