@@ -1,0 +1,30 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Pytest
+.pytest_cache/
+
+# Generated audio output
+output/*.wav
+output/*.mp3
+
+# Voice profiles (contain personal voice data)
+voices/
+
+# Model cache
+*.pt
+*.pth
+
+# OS
+.DS_Store
+
+# uv
+uv.lock

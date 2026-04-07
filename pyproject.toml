@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "voicecraft"
+version = "0.1.0"
+description = "Clone a voice from a 30-second sample and synthesize speech in English and Hindi"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "TTS>=0.22.0",
+    "torch>=2.1.0",
+    "torchaudio>=2.1.0",
+    "typer[all]>=0.9.0",
+    "rich>=13.0.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.0",
+    "pydub>=0.25.0",
+    "numpy<2.0.0",
+]
+
+[project.scripts]
+voicecraft = "voicecraft.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/voicecraft"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
