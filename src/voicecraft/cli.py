@@ -35,14 +35,60 @@ def setup() -> None:
 
 
 @app.command()
-def clone(
-    sample: Path = typer.Option(..., "--sample", "-s", help="Path to voice sample audio file (6-60s)."),
-    name: str = typer.Option(..., "--name", "-n", help="Name for the voice profile."),
+def record(
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output WAV file path."),
+    duration: float = typer.Option(30.0, "--duration", "-d", help="Recording duration in seconds."),
+    device: Optional[int] = typer.Option(None, "--device", help="Audio input device index."),
+    list_devices_flag: bool = typer.Option(False, "--list-devices", help="List available audio input devices and exit."),
 ) -> None:
-    """Extract a voice profile from an audio sample for reuse."""
+    """Record audio from your microphone and save as a WAV file."""
+    from voicecraft.recorder import list_devices as _list_devices
+    from voicecraft.recorder import record_audio
+
+    if list_devices_flag:
+        devices = _list_devices()
+        if not devices:
+            console.print("[yellow]No audio input devices found.[/yellow]")
+            raise typer.Exit(1)
+
+        table = Table(title="Audio Input Devices")
+        table.add_column("Index", justify="right", style="bold")
+        table.add_column("Name")
+        table.add_column("Channels", justify="right")
+
+        for d in devices:
+            table.add_row(str(d["index"]), d["name"], str(d["channels"]))
+
+        console.print(table)
+        return
+
+    if duration < 6:
+        console.print("[red]Error: Duration must be at least 6 seconds for voice cloning.[/red]")
+        raise typer.Exit(1)
+
+    record_audio(duration=duration, output_path=output, device=device)
+
+
+@app.command()
+def clone(
+    sample: Optional[Path] = typer.Option(None, "--sample", "-s", help="Path to voice sample audio file (6-60s)."),
+    name: str = typer.Option(..., "--name", "-n", help="Name for the voice profile."),
+    record_mic: bool = typer.Option(False, "--record", "-r", help="Record from microphone instead of using a file."),
+    duration: float = typer.Option(30.0, "--duration", "-d", help="Recording duration in seconds (used with --record)."),
+    device: Optional[int] = typer.Option(None, "--device", help="Audio input device index (used with --record)."),
+) -> None:
+    """Extract a voice profile from an audio sample or a live microphone recording."""
     from voicecraft.extractor import extract_voice_profile
 
-    if not sample.exists():
+    if record_mic:
+        from voicecraft.recorder import record_audio
+
+        console.print(f"[bold]Recording voice sample for profile: {name}[/bold]")
+        sample = record_audio(duration=duration, device=device)
+    elif sample is None:
+        console.print("[red]Error: Provide --sample <file> or use --record to capture from mic.[/red]")
+        raise typer.Exit(1)
+    elif not sample.exists():
         console.print(f"[red]Error: File not found: {sample}[/red]")
         raise typer.Exit(1)
 

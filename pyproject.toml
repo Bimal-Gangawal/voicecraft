@@ -19,6 +19,7 @@ dependencies = [
     "soundfile>=0.12.0",
     "pydub>=0.25.0",
     "numpy<2.0.0",
+    "sounddevice>=0.4.6",
 ]
 
 [project.scripts]
