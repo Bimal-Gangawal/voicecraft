@@ -22,13 +22,21 @@ console = Console()
 
 @app.command()
 def setup() -> None:
-    """Download the XTTS v2 model (run this once before using other commands)."""
+    """Download the XTTS v2 model and translation models (run this once before using other commands)."""
     from voicecraft.model_manager import download_model
+    from voicecraft.translator import ensure_translation_models
 
     console.print("[bold]Voicecraft Setup[/bold]")
     console.print()
     start = time.time()
     download_model()
+
+    # Download translation models for live translation
+    console.print()
+    console.print("[cyan]Setting up translation models...[/cyan]")
+    ensure_translation_models("en", "hi")
+    ensure_translation_models("hi", "en")
+
     elapsed = time.time() - start
     console.print(f"[green]Setup complete in {elapsed:.0f}s. You're ready to clone voices![/green]")
 
@@ -342,6 +350,58 @@ def optimize(
     console.print()
     console.print(f"[green]Optimization finished in {elapsed:.1f}s.[/green]")
     console.print(f"[dim]To undo: voicecraft optimize --voice {voice} --restore[/dim]")
+
+
+@app.command()
+def translate(
+    voice: str = typer.Option(..., "--voice", "-v", help="Name of a saved voice profile for TTS output."),
+    from_lang: str = typer.Option("en", "--from", "-f", help="Source language to listen for: 'en' or 'hi'."),
+    to_lang: str = typer.Option("hi", "--to", "-t", help="Target language to translate into: 'en' or 'hi'."),
+    whisper_model: str = typer.Option("small", "--whisper-model", help="Whisper model: tiny, base, small, medium, large-v3."),
+    device: Optional[int] = typer.Option(None, "--device", help="Audio input device index."),
+    speed: float = typer.Option(1.0, "--speed", help="Speech speed for TTS output."),
+    temperature: float = typer.Option(0.75, "--temperature", help="TTS expressiveness."),
+) -> None:
+    """Live translation: speak in one language, hear it back in another using your cloned voice.
+
+    Listens to your microphone, transcribes speech, translates it,
+    and speaks the translation using your cloned voice — all fully local.
+
+    Examples:
+      voicecraft translate --voice my_voice --from en --to hi
+      voicecraft translate --voice my_voice --from hi --to en
+      voicecraft translate --voice my_voice --from en --to hi --whisper-model medium
+    """
+    from voicecraft.translator import LiveTranslator, TranslatorConfig, WHISPER_MODELS
+
+    if from_lang not in SUPPORTED_LANGUAGES:
+        console.print(f"[red]Error: Unsupported source language '{from_lang}'. Use: {list(SUPPORTED_LANGUAGES.keys())}[/red]")
+        raise typer.Exit(1)
+
+    if to_lang not in SUPPORTED_LANGUAGES:
+        console.print(f"[red]Error: Unsupported target language '{to_lang}'. Use: {list(SUPPORTED_LANGUAGES.keys())}[/red]")
+        raise typer.Exit(1)
+
+    if from_lang == to_lang:
+        console.print("[red]Error: Source and target languages must be different.[/red]")
+        raise typer.Exit(1)
+
+    if whisper_model not in WHISPER_MODELS:
+        console.print(f"[red]Error: Unknown whisper model '{whisper_model}'. Use: {list(WHISPER_MODELS)}[/red]")
+        raise typer.Exit(1)
+
+    config = TranslatorConfig(
+        voice_name=voice,
+        from_lang=from_lang,
+        to_lang=to_lang,
+        whisper_model=whisper_model,
+        mic_device=device,
+        speed=speed,
+        temperature=temperature,
+    )
+
+    translator = LiveTranslator(config)
+    translator.run()
 
 
 if __name__ == "__main__":
