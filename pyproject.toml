@@ -21,6 +21,8 @@ dependencies = [
     "pydub>=0.25.0",
     "numpy<2.0.0",
     "sounddevice>=0.4.6",
+    "faster-whisper>=1.0.0",
+    "argostranslate>=1.9.0",
 ]
 
 [project.scripts]
